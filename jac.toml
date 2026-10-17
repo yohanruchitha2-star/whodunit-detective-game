@@ -5,6 +5,13 @@ description = "Whodunit detective game architecture"
 entry-point = "main.jac"
 kind = "web-app"
 
+[byllm.model]
+default_model = "gemini/gemini-3.8-flash"
+
+[byllm.call_params]
+max_output_retries = 3
+
+# Same settings under the table names that jaclang 0.16.x reads.
 [plugins.byllm.model]
 default_model = "gemini/gemini-3.8-flash"
 
