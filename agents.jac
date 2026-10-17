@@ -6,9 +6,9 @@ import os;
 import from jaclang.byllm.lib { Model }
 
 # Explicit model. On jaclang 0.34 the ambient `llm` configured only through jac.toml crashed the runtime
-# (segfault, exit 134) in our tests. Set GEMINI_API_KEY (or GROQ_API_KEY with BYLLM_DEFAULT_MODEL=groq/<model>)
+# (segfault, exit 134) in our tests. Set GROQ_API_KEY
 # in the environment; no key ever goes in a file.
-glob llm: Model = Model(model_name=os.environ.get("BYLLM_DEFAULT_MODEL", "gemini/gemini-3.8-flash"));
+glob llm: Model = Model(model_name=os.environ.get("BYLLM_DEFAULT_MODEL", "groq/openai/gpt-oss-120b"));
 
 obj ClueSpec {
     has id: str;

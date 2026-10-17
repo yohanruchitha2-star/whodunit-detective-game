@@ -1,4 +1,4 @@
-# Live smoke test for the 4 agents. Needs GEMINI_API_KEY (or GROQ_API_KEY) in the environment.
+# Live smoke test for the 4 agents. Needs GROQ_API_KEY in the environment.
 # Run: jac run test_agents.jac
 import from agents { CaseSpec, ClueInfo }
 import from agents { game_master, suspect_reply, give_hint, reveal_story }

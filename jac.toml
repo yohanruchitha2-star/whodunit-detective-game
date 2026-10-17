@@ -6,7 +6,7 @@ entry-point = "main.jac"
 kind = "web-app"
 
 [byllm.model]
-default_model = "gemini/gemini-3.8-flash"
+default_model = "groq/openai/gpt-oss-120b"
 
 [byllm.call_params]
 max_output_retries = 3
