@@ -118,7 +118,7 @@ def:pub ChatPanel(
             <aside className="hidden flex-col gap-3 overflow-y-auto border-r border-[#e5d5b5] p-4 md:flex">
                 <div className="relative bg-white p-2 pb-3 shadow-md">
                     <Tape className="-top-3 left-1/2 -translate-x-1/2 rotate-2" />
-                    <PhotoBox name={name} idx={idx} />
+                    <PhotoBox name={name} idx={idx} role={role} />
                     {isCracked and <span className="absolute right-3 top-8">
                         <Stamp text="Cracked" className="bg-white/70 text-xl" />
                     </span>}
