@@ -198,6 +198,13 @@ def:pub ClientApp() -> JsxElement {
         await talk(text, None);
     }
 
+    async def ask_starter(text: str) {
+        if busy or not selectedId {
+            return;
+        }
+        await talk(text, None);
+    }
+
     async def show_clue {
         if busy or not selectedId or not selectedClue {
             return;
@@ -388,6 +395,7 @@ def:pub ClientApp() -> JsxElement {
                     onDraft={set_draft}
                     onSend={send_question}
                     onShow={show_clue}
+                    onAsk={ask_starter}
                 />
                 <aside className="flex flex-col">
                     <Notebook
