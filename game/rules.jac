@@ -1,21 +1,22 @@
-import from game.types { CaseSpec, PublicCase, Result }
-
-# TODO: validate a proposed case specification.
-def validate_case(spec: CaseSpec) -> bool {
-    return False;
+def apply_score(score: int, event: str) -> int {
+    change = 0;
+    if event == "question" {
+        change = -50;
+    } elif event == "hint" {
+        change = -100;
+    } elif event == "crack" {
+        change = 150;
+    } elif event == "wrong_accuse" {
+        change = -300;
+    }
+    return max(0, score + change);
 }
 
-# TODO: apply an authorized score event.
-def score_event(event: str) -> int {
-    return 0;
-}
-
-# TODO: mark a suspect cracked after the walker checks the rules.
-def mark_cracked(suspect_id: str) -> bool {
-    return False;
-}
-
-# TODO: project graph state into a safe public case.
-def to_public(case_id: str) -> PublicCase {
-    return PublicCase();
+def rank(score: int) -> str {
+    if score >= 850 {
+        return "Master Detective";
+    } elif score >= 600 {
+        return "Inspector";
+    }
+    return "Rookie";
 }
