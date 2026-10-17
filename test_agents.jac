@@ -40,7 +40,7 @@ def check_case(spec: CaseSpec) -> list[str] {
 }
 
 with entry {
-    spec = game_master("Sri Lankan wedding");
+    spec = game_master("Sri Lankan wedding", 4, 1);
     print(f"CASE: {spec.title} @ {spec.where}");
     print(f"WHAT: {spec.what}");
     problems = check_case(spec);
@@ -48,13 +48,13 @@ with entry {
 
     liar = [s for s in spec.suspects if s.lie is not None][0];
     known = [ClueInfo(id=c.id, title=c.title, text=c.text) for c in spec.clues if c.id in liar.knows];
-    out = suspect_reply(liar, known, [], "Where were you at the time?", None, False);
+    out = suspect_reply(liar, known, [], "Where were you at the time?", None, False, "normal");
     print(f"{liar.name} ({liar.style}): {out.reply}  clues={out.proposed_clue_ids}");
 
     breaker = [c for c in spec.clues if c.breaks == liar.id];
     if len(breaker) > 0 {
         shown = ClueInfo(id=breaker[0].id, title=breaker[0].title, text=breaker[0].text);
-        crack = suspect_reply(liar, known, [], "", shown, True);
+        crack = suspect_reply(liar, known, [], "", shown, True, "normal");
         print(f"CRACKED {liar.name}: {crack.reply}");
     }
 

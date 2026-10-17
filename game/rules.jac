@@ -1,17 +1,41 @@
-import from game.shapes { CaseSpec, SuspectSpec }
+import from agents { CaseSpec }
 
-def apply_score(score: int, event: str) -> int {
+obj DiffCfg {
+    has name: str = "normal";
+    has suspects: int = 4;
+    has herrings: int = 1;
+    has hint_cost: int = 100;
+    has max_hints: int = -1;
+    has wrong_allowed: int = 1;
+    has multiplier: float = 1.0;
+}
+
+def difficulty_cfg(level: str) -> DiffCfg {
+    if level == "easy" {
+        return DiffCfg(name="easy", suspects=3, herrings=1, hint_cost=50, max_hints=-1, wrong_allowed=2, multiplier=0.8);
+    }
+    if level == "hard" {
+        return DiffCfg(name="hard", suspects=5, herrings=2, hint_cost=150, max_hints=1, wrong_allowed=0, multiplier=1.5);
+    }
+    return DiffCfg(name="normal", suspects=4, herrings=1, hint_cost=100, max_hints=-1, wrong_allowed=1, multiplier=1.0);
+}
+
+def apply_score(score: int, event: str, hint_cost: int) -> int {
     change = 0;
     if event == "question" {
         change = -50;
     } elif event == "hint" {
-        change = -100;
+        change = -hint_cost;
     } elif event == "crack" {
         change = 150;
     } elif event == "wrong_accuse" {
         change = -300;
     }
     return max(0, score + change);
+}
+
+def final_score(score: int, multiplier: float) -> int {
+    return max(0, int(round(score * multiplier)));
 }
 
 def rank(score: int) -> str {
@@ -23,116 +47,59 @@ def rank(score: int) -> str {
     return "Rookie";
 }
 
-def validate_case(data: CaseSpec) -> bool {
-    if len(data.suspects) != 4 {
-        return False;
+# Returns a list of problems; an empty list means the case is playable.
+def validate_case(spec: CaseSpec, cfg: DiffCfg) -> list[str] {
+    problems: list[str] = [];
+    sids = [s.id for s in spec.suspects];
+    cids = [c.id for c in spec.clues];
+    if len(spec.suspects) != cfg.suspects or len(set(sids)) != cfg.suspects {
+        problems.append("wrong number of suspects");
+        return problems;
     }
-    if len(data.clues) < 3 or len(data.clues) > 6 {
-        return False;
+    if spec.culprit_id not in sids {
+        problems.append("culprit is not a suspect");
+        return problems;
     }
-
-    suspect_ids: list[str] = [];
-    culprit_count = 0;
-    culprit_has_lie = False;
-    culprit_has_breaking_clue = False;
-    other_lie_with_break = False;
-    for suspect in data.suspects {
-        if suspect.id in suspect_ids {
-            return False;
+    if len(spec.clues) < 3 or len(spec.clues) > 7 or len(set(cids)) != len(cids) {
+        problems.append("need 3-7 unique clues");
+        return problems;
+    }
+    for c in spec.clues {
+        if c.breaks is not None and c.breaks not in sids {
+            problems.append(f"clue {c.id} breaks unknown suspect");
         }
-        suspect_ids = suspect_ids + [suspect.id];
-        if suspect.id == data.culprit_id {
-            culprit_count += 1;
-            culprit_has_lie = suspect.lie is not None and suspect.lie != "";
+        witnesses = [s.id for s in spec.suspects if c.id in s.knows];
+        if len(witnesses) == 0 {
+            problems.append(f"clue {c.id} is known by nobody");
+        }
+        if c.breaks is not None and c.breaks in witnesses {
+            problems.append(f"clue {c.id} is known by the liar it breaks");
+        }
+        if c.breaks is not None and len([w for w in witnesses if w != c.breaks]) == 0 {
+            problems.append(f"clue {c.id} has no witness");
         }
     }
-    if culprit_count != 1 {
-        return False;
-    }
-
-    clue_ids: list[str] = [];
-    for clue in data.clues {
-        if clue.id in clue_ids {
-            return False;
-        }
-        clue_ids = clue_ids + [clue.id];
-        if clue.breaks is not None and clue.breaks != "" and clue.breaks not in suspect_ids {
-            return False;
-        }
-        if clue.breaks == data.culprit_id {
-            culprit_has_breaking_clue = True;
-        }
-        if clue.breaks is not None and clue.breaks != "" and clue.breaks != data.culprit_id {
-            for suspect in data.suspects {
-                if suspect.id == clue.breaks and suspect.lie is not None and suspect.lie != "" {
-                    other_lie_with_break = True;
-                }
+    herrings = 0;
+    for s in spec.suspects {
+        for k in s.knows {
+            if k not in cids {
+                problems.append(f"{s.id} knows a missing clue");
             }
         }
-    }
-    if not culprit_has_lie or not culprit_has_breaking_clue or not other_lie_with_break {
-        return False;
-    }
-
-    for suspect in data.suspects {
-        for known_id in suspect.knows {
-            if known_id not in clue_ids {
-                return False;
+        if s.lie is not None {
+            breakers = [c for c in spec.clues if c.breaks == s.id];
+            if len(breakers) == 0 {
+                problems.append(f"liar {s.id} cannot be cracked");
             }
-        }
-    }
-    for clue in data.clues {
-        known_by_any = False;
-        known_by_different_suspect = False;
-        for suspect in data.suspects {
-            if clue.id in suspect.knows {
-                known_by_any = True;
-                if clue.breaks is None or suspect.id != clue.breaks {
-                    known_by_different_suspect = True;
-                }
+            if s.id != spec.culprit_id {
+                herrings += 1;
             }
-        }
-        if not known_by_any {
-            return False;
-        }
-        if clue.breaks is not None and clue.breaks != "" and not known_by_different_suspect {
-            return False;
+        } elif s.id == spec.culprit_id {
+            problems.append("culprit has no lie");
         }
     }
-    return True;
-}
-
-def filter_found_clues(known_ids: list[str], found_ids: list[str], proposed_ids: list[str]) -> list[str] {
-    filtered: list[str] = [];
-    for clue_id in proposed_ids {
-        if clue_id in known_ids and clue_id not in found_ids and clue_id not in filtered {
-            filtered = filtered + [clue_id];
-        }
+    if herrings != cfg.herrings {
+        problems.append("wrong number of red-herring liars");
     }
-    return filtered;
-}
-
-def breaks_lie(has_break_edge: bool, found: bool, cracked: bool) -> bool {
-    return has_break_edge and found and not cracked;
-}
-
-def public_case(case_id: str, title: str, where: str, what: str, goal: str, score: int, suspects: list[SuspectSpec]) -> dict[str, object] {
-    public_suspects: list[dict[str, object]] = [];
-    for suspect in suspects {
-        public_suspects = public_suspects + [{
-            "id": suspect.id,
-            "name": suspect.name,
-            "role": suspect.role,
-            "style": suspect.style
-        }];
-    }
-    return {
-        "case_id": case_id,
-        "title": title,
-        "where": where,
-        "what": what,
-        "goal": goal,
-        "score": score,
-        "suspects": public_suspects
-    };
+    return problems;
 }

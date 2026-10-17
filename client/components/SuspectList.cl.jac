@@ -50,7 +50,7 @@ def:pub SuspectList(
                 sid={s.id}
                 name={s.name}
                 role={s.role}
-                personality={s.personality}
+                personality={s.style}
                 selected={s.id == selectedId}
                 isCracked={s.cracked or s.id in cracked}
                 onSelect={onSelect}

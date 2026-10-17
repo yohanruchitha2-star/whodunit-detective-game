@@ -15,7 +15,7 @@ import from .components.AccuseDialog { AccuseDialog }
 import from .components.ResultScreen { ResultScreen }
 
 sv import from game.api { new_case, question, hint, accuse }
-sv import from game.types { PublicCase, PublicSuspect, PublicClue, ChatTurn, Result }
+sv import from game.types { PublicCase, PublicSuspect, PublicClue, QuestionOut, HintOut, AccuseOut }
 
 def:pub ClientApp() -> JsxElement {
     # screen: "start" | "loading" | "play" | "result"
@@ -41,7 +41,12 @@ def:pub ClientApp() -> JsxElement {
         lastChance: bool = False,
         flash: str = "",
         flashBad: bool = False,
-        outcome: Result | None = None;
+        difficulty: str = "normal",
+        hintCost: int = 100,
+        hintsLeft: int = -1,
+        chancesLeft: int = 2,
+        multiplier: float = 1.0,
+        outcome: AccuseOut | None = None;
 
     # ---------- helpers ----------
     def case_id_now -> str {
@@ -94,12 +99,13 @@ def:pub ClientApp() -> JsxElement {
         flash = "";
         outcome = None;
         startError = "";
+        hintsLeft = -1;
     }
 
     # ---------- new_case ----------
-    async def fetch_case -> PublicCase | None {
+    async def fetch_case(level: str) -> PublicCase | None {
         try {
-            pc = await new_case();
+            pc = await new_case(level);
             if pc and pc.case_id {
                 return pc;
             }
@@ -109,15 +115,16 @@ def:pub ClientApp() -> JsxElement {
         return None;
     }
 
-    async def start_case {
+    async def start_case(level: str) {
         reset_game();
+        difficulty = level;
         loadingMsg = "Generating your case...";
         screen = "loading";
-        pc = await fetch_case();
+        pc = await fetch_case(level);
         if pc is None {
             # The backend falls back to the classic case if generation fails.
             loadingMsg = "Loading a classic case...";
-            pc = await fetch_case();
+            pc = await fetch_case(level);
         }
         if pc is None {
             startError = "Could not start a case. Is the backend running? Try again.";
@@ -126,8 +133,12 @@ def:pub ClientApp() -> JsxElement {
         }
         caseNow = pc;
         suspects = pc.suspects;
-        clues = pc.found_clues;
+        clues = [];
         score = pc.score;
+        hintCost = pc.hint_cost;
+        hintsLeft = pc.hints_left;
+        chancesLeft = pc.chances_left;
+        multiplier = pc.multiplier;
         if len(pc.suspects) > 0 {
             selectedId = pc.suspects[0].id;
         }
@@ -150,26 +161,28 @@ def:pub ClientApp() -> JsxElement {
         try {
             # Positional call: local names must match the server parameter names.
             turn = await question(case_id, suspect_id, text, clue_id);
-            kind = "crack" if turn.cracked_now else ("shrug" if clue_id else "normal");
-            lines = lines + [{"who": "suspect", "text": turn.reply, "kind": kind}];
-            known: list[str] = [c.id for c in clues];
-            fresh: list[PublicClue] = [c for c in turn.notebook if c.id not in known];
-            for c in fresh {
-                lines = lines + [{"who": "system", "text": "New clue in your notebook: " + c.text, "kind": "clue"}];
-            }
-            if len(turn.notebook) >= len(clues) {
-                clues = turn.notebook;
-            }
-            if turn.cracked_now {
-                if suspect_id not in cracked {
-                    cracked = cracked + [suspect_id];
+            if turn.error != "" {
+                lines = lines + [{"who": "system", "text": "Could not get an answer (" + turn.error + "). Try again.", "kind": "error"}];
+            } else {
+                kind = "crack" if turn.cracked else ("shrug" if clue_id else "normal");
+                lines = lines + [{"who": "suspect", "text": turn.reply, "kind": kind}];
+                known: list[str] = [c.id for c in clues];
+                fresh: list[PublicClue] = [c for c in turn.new_clues if c.id not in known];
+                for c in fresh {
+                    lines = lines + [{"who": "system", "text": "New clue in your notebook: " + c.text, "kind": "clue"}];
                 }
-                selectedClue = "";
-                pop_flash("CRACKED! +150", True);
-            } elif len(fresh) > 0 {
-                pop_flash("New clue!", False);
+                clues = clues + fresh;
+                if turn.cracked {
+                    if suspect_id not in cracked {
+                        cracked = cracked + [suspect_id];
+                    }
+                    selectedClue = "";
+                    pop_flash("CRACKED! +150", True);
+                } elif len(fresh) > 0 {
+                    pop_flash("New clue!", False);
+                }
+                score = turn.score;
             }
-            score = turn.score;
         } except Exception {
             lines = lines + [{"who": "system", "text": "No answer came back. Try again.", "kind": "error"}];
         }
@@ -205,12 +218,18 @@ def:pub ClientApp() -> JsxElement {
         busy = True;
         notice = "";
         try {
-            nudge = await hint(case_id);
-            hints = hints + [nudge];
-            # hint() returns only text, so mirror the server's -100 here.
-            # The next server response sets the real score.
-            score = max(0, score - 100);
-            pop_flash("-100", False);
+            res = await hint(case_id);
+            if res.error == "hint_limit" {
+                notice = "No hints left on this difficulty.";
+                hintsLeft = 0;
+            } elif res.error != "" {
+                notice = "Could not get a hint (" + res.error + "). Try again.";
+            } else {
+                hints = hints + [res.hint];
+                hintsLeft = res.hints_left;
+                score = res.score;
+                pop_flash("-" + str(hintCost), False);
+            }
         } except Exception {
             notice = "Could not get a hint. Try again.";
         }
@@ -248,16 +267,21 @@ def:pub ClientApp() -> JsxElement {
         accuseError = "";
         try {
             res = await accuse(case_id, suspect_id, reason);
-            score = res.score;
-            if res.final {
-                outcome = res;
-                showAccuse = False;
-                screen = "result";
+            if res.error != "" {
+                accuseError = "Could not accuse (" + res.error + ").";
             } else {
-                lastChance = True;
-                showAccuse = False;
-                notice = "Wrong! -300. One chance left.";
-                pop_flash("WRONG! -300", True);
+                score = res.score;
+                if res.game_over {
+                    outcome = res;
+                    showAccuse = False;
+                    screen = "result";
+                } else {
+                    chancesLeft = res.chances_left;
+                    lastChance = res.chances_left <= 1;
+                    showAccuse = False;
+                    notice = "Wrong! -300. " + str(res.chances_left) + " chance(s) left.";
+                    pop_flash("WRONG! -300", True);
+                }
             }
         } except Exception {
             accuseError = "No answer came back. Try again.";
@@ -286,6 +310,15 @@ def:pub ClientApp() -> JsxElement {
         accuseReason = v;
     }
 
+    def play_again {
+        reset_game();
+        screen = "start";
+    }
+
+    def pick_level(level: str) {
+        difficulty = level;
+    }
+
     def clear_notice(_e: MouseEvent) {
         notice = "";
     }
@@ -298,13 +331,15 @@ def:pub ClientApp() -> JsxElement {
                 loadingMsg={loadingMsg}
                 errorMsg={startError}
                 onStart={start_case}
+                selected={difficulty}
+                onSelect={pick_level}
             />
         </div>;
     }
 
     if screen == "result" and outcome is not None {
         return <div className="dark min-h-svh bg-background text-foreground">
-            <ResultScreen outcome={outcome} clues={clues} onPlayAgain={start_case} />
+            <ResultScreen outcome={outcome} clues={clues} onPlayAgain={play_again} />
         </div>;
     }
 
@@ -318,14 +353,17 @@ def:pub ClientApp() -> JsxElement {
     }
     currentLines: list[dict[str, str]] = chats[selectedId] if selectedId in chats else [];
     title = caseNow.title if caseNow is not None else "";
-    setting = caseNow.setting if caseNow is not None else "";
-    summary = caseNow.summary if caseNow is not None else "";
+    setting = caseNow.place if caseNow is not None else "";
+    summary = caseNow.what if caseNow is not None else "";
 
     return <div className="dark min-h-svh bg-background text-foreground">
         <div className="flex min-h-svh flex-col">
             <header className="flex flex-wrap items-center gap-4 border-b bg-card px-5 py-3">
                 <span className="text-sm font-extrabold tracking-[0.15em] text-primary">WHODUNIT</span>
                 <h1 className="flex-1 text-lg font-semibold">{title}</h1>
+                <span className="rounded-full border border-primary px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-primary">
+                    {difficulty}
+                </span>
                 <span className="rounded-full border px-4 py-1.5">
                     Score <strong className="ml-1 text-lg text-primary">{score}</strong>
                 </span>
@@ -358,6 +396,8 @@ def:pub ClientApp() -> JsxElement {
                         hints={hints}
                         busy={busy}
                         lastChance={lastChance}
+                        hintCost={hintCost}
+                        hintsLeft={hintsLeft}
                         onPickClue={pick_clue}
                         onHint={get_hint}
                         onAccuse={open_accuse}
@@ -375,6 +415,7 @@ def:pub ClientApp() -> JsxElement {
             errorMsg={accuseError}
             busy={busy}
             lastChance={lastChance}
+            chancesLeft={chancesLeft}
             onPick={pick_accused}
             onReason={set_reason}
             onSubmit={submit_accusation}
