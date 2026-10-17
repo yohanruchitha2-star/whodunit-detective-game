@@ -6,16 +6,9 @@ entry-point = "main.jac"
 kind = "web-app"
 
 [byllm.model]
-default_model = "gemini/gemini-3.8-flash"
+default_model = "groq/openai/gpt-oss-120b"
 
 [byllm.call_params]
-max_output_retries = 3
-
-# Same settings under the table names that jaclang 0.16.x reads.
-[plugins.byllm.model]
-default_model = "gemini/gemini-3.8-flash"
-
-[plugins.byllm.call_params]
 max_output_retries = 3
 
 [jac-shadcn]
@@ -36,11 +29,6 @@ react = "^18.2.0"
 react-dom = "^18.2.0"
 tw-animate-css = "^1.4.0"
 "@fontsource-variable/inter" = "^5.3.0"
-react-router-dom = "latest"
-react-error-boundary = "latest"
-react-hook-form = "latest"
-zod = "latest"
-"@hookform/resolvers" = "latest"
 
 [dependencies.npm.dev]
 tailwindcss = "latest"
@@ -58,8 +46,3 @@ lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
 [jacpack]
 name = "prj_e8bfa3650ccb4f16b941a1b7e6b6b8c9"
 description = "Jac IDE snapshot for prj_e8bfa3650ccb4f16b941a1b7e6b6b8c9"
-
-# Same settings under the table names that jaclang 0.16.x reads.
-[plugins.client.vite]
-plugins = ["tailwindcss()"]
-lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]

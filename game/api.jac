@@ -146,9 +146,14 @@ def _say(c: Case, s: Suspect, speaker: str, text: str) {
 }
 
 def _history(c: Case, s: Suspect) -> list[str] {
-    lines = [l for l in [c ->:HasChat:->] if l.suspect_id == s.sid];
-    lines = sorted(lines, key=lambda l: ChatLine : l.n);
-    return [f"{l.speaker}: {l.text}" for l in lines[-8:]];
+    by_n: dict[int, ChatLine] = {};
+    for l in [c ->:HasChat:->] {
+        if l.suspect_id == s.sid {
+            by_n[l.n] = l;
+        }
+    }
+    ordered = [by_n[k] for k in sorted(by_n.keys())];
+    return [f"{l.speaker}: {l.text}" for l in ordered[-8:]];
 }
 
 # ---------------- public endpoints ----------------
