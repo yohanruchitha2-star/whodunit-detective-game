@@ -1,5 +1,7 @@
 """Corkboard look: wooden frame, taped labels, paper notes and suspect polaroids."""
 
+import from .Photos { photo_for }
+
 glob HAND: dict[str, str] = {"fontFamily": "'Caveat', 'Segoe Print', 'Comic Sans MS', cursive"};
 glob PHOTO_COLORS: list[str] = ["bg-[#7c5c46]", "bg-[#55697a]", "bg-[#6b7a52]", "bg-[#87566a]", "bg-[#7a6640]"];
 glob TILTS: list[str] = ["-rotate-2", "rotate-1", "rotate-2", "-rotate-1", "rotate-1"];
@@ -52,11 +54,26 @@ def:pub Stamp(text: str, good: bool = False, className: str = "") -> JsxElement 
     </span>;
 }
 
-# The "photo" part of a polaroid: a coloured square with the suspect's initial.
-def:pub PhotoBox(name: str, idx: int, className: str = "") -> JsxElement {
+# The "photo" part of a polaroid: a stock photo picked from the role (Photos.cl.jac),
+# with the suspect's initial on a coloured square behind it as the fallback.
+def:pub PhotoBox(name: str, idx: int, role: str = "", className: str = "") -> JsxElement {
+    has broken: bool = False;
+
+    def handle_error(_e: Event) {
+        broken = True;
+    }
+
     color = PHOTO_COLORS[idx % len(PHOTO_COLORS)];
-    return <div className={"flex aspect-square w-full items-center justify-center " + color + " " + className}>
+    src = photo_for(name, role, idx);
+    return <div className={"relative flex aspect-square w-full items-center justify-center overflow-hidden " + color + " " + className}>
         <span className="text-7xl font-bold text-[#fdf6e3]/90" style={HAND}>{name[0] if name else "?"}</span>
+        {not broken and <img
+            className="absolute inset-0 h-full w-full object-cover sepia-[0.25]"
+            src={src}
+            alt={name}
+            loading="lazy"
+            onError={handle_error}
+        />}
     </div>;
 }
 
@@ -81,7 +98,7 @@ def:pub Polaroid(
         title={"Question " + name}
     >
         <Tape className="-top-3 left-1/2 -translate-x-1/2 -rotate-3" />
-        <PhotoBox name={name} idx={idx} />
+        <PhotoBox name={name} idx={idx} role={role} />
         <span className="mt-2 block text-lg font-bold text-[#231a12]">{name}</span>
         <span className="block text-sm text-[#5a4a3a]">{role + ((" · " + style) if style else "")}</span>
         {isCracked and <span className="absolute right-2 top-6">

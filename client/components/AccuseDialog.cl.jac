@@ -18,7 +18,7 @@ def:pub AccuseOption(
 
     tone = "ring-4 ring-red-700" if selected else "hover:-translate-y-0.5";
     return <button className={"flex flex-col bg-white p-1.5 pb-2 text-left shadow-md transition " + tone} onClick={handle_click}>
-        <PhotoBox name={name} idx={idx} />
+        <PhotoBox name={name} idx={idx} role={role} />
         <span className="mt-1 text-sm font-bold">{name}</span>
         <span className="text-xs text-[#5a4a3a]">{role}</span>
     </button>;
