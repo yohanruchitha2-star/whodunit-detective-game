@@ -1,72 +1,384 @@
+"""Whodunit - client shell (owner: Sithil).
+
+Holds the client state and calls the backend in game/api.jac:
+new_case, question (also used for "Show clue"), hint, accuse.
+The server is the source of truth for clues, cracks and score; the screens
+live in client/components/.
+"""
+
+import from .components.StartScreen { StartScreen }
+import from .components.CaseFile { CaseFile }
+import from .components.SuspectList { SuspectList }
+import from .components.ChatPanel { ChatPanel }
+import from .components.Notebook { Notebook }
+import from .components.AccuseDialog { AccuseDialog }
+import from .components.ResultScreen { ResultScreen }
+
+sv import from game.api { new_case, question, hint, accuse }
+sv import from game.types { PublicCase, PublicSuspect, PublicClue, ChatTurn, Result }
+
 def:pub ClientApp() -> JsxElement {
-    has screen: str = "start";
-    has case_id: str = "";
-    has loading: bool = False;
-    has question_text: str = "";
-    has selected_suspect: str = "";
-    has selected_clue: str = "";
-    has accusation_reason: str = "";
+    # screen: "start" | "loading" | "play" | "result"
+    has screen: str = "start",
+        loadingMsg: str = "Generating your case...",
+        startError: str = "",
+        caseNow: PublicCase | None = None,
+        suspects: list[PublicSuspect] = [],
+        score: int = 1000,
+        selectedId: str = "",
+        chats: dict[str, list[dict[str, str]]] = {},
+        clues: list[PublicClue] = [],
+        selectedClue: str = "",
+        cracked: list[str] = [],
+        hints: list[str] = [],
+        draft: str = "",
+        busy: bool = False,
+        notice: str = "",
+        showAccuse: bool = False,
+        accuseId: str = "",
+        accuseReason: str = "",
+        accuseError: str = "",
+        lastChance: bool = False,
+        flash: str = "",
+        flashBad: bool = False,
+        outcome: Result | None = None;
 
-    def new_case(e: MouseEvent) {
-        screen = "generating";
-        loading = True;
+    # ---------- helpers ----------
+    def case_id_now -> str {
+        if caseNow is not None {
+            return caseNow.case_id;
+        }
+        return "";
     }
 
-    def update_question(e: ChangeEvent) {
-        question_text = e.target.value;
+    def clue_text(cid: str) -> str {
+        for c in clues {
+            if c.id == cid {
+                return c.text;
+            }
+        }
+        return "";
     }
 
-    def update_reason(e: ChangeEvent) {
-        accusation_reason = e.target.value;
+    # Copy-then-assign: a `{**chats, sid: x}` literal would use "sid" as the
+    # key in the compiled JS, not the variable's value.
+    def chats_with(sid: str, lines: list[dict[str, str]]) -> dict[str, list[dict[str, str]]] {
+        nxt = {**chats} as dict[str, list[dict[str, str]]];
+        nxt[sid] = lines;
+        return nxt;
     }
 
-    return <main className="min-h-svh bg-muted/40 px-4 py-8 text-foreground sm:px-6">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-            <header className="rounded-xl border bg-card p-6 shadow-sm">
-                <p className="text-sm font-medium text-primary">Whodunit</p>
-                <h1 className="mt-2 text-3xl font-semibold tracking-tight">A mystery is waiting</h1>
-                <p className="mt-2 text-sm text-muted-foreground">Question the suspects. Follow the clues. Find the truth.</p>
-            </header>
-            {if screen == "start" {
-                <section className="rounded-xl border bg-card p-8 shadow-sm">
-                    <p className="text-muted-foreground">Your case file, suspect interviews, and notebook will appear here.</p>
-                    <button className="mt-6 rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground" onClick={new_case}>New Case</button>
-                </section>
-            } elif screen == "generating" {
-                <section className="rounded-xl border bg-card p-8 shadow-sm" aria-live="polite">
-                    <h2 className="text-xl font-semibold">Generating your case...</h2>
-                    <p className="mt-2 text-muted-foreground">The case file and suspects will appear here.</p>
-                </section>
-            } elif screen == "play" {
-                <section className="grid gap-4 lg:grid-cols-3">
-                    <article className="rounded-xl border bg-card p-6 shadow-sm">
-                        <h2 className="text-xl font-semibold">Case file</h2>
-                        <p className="mt-3 text-muted-foreground">The mystery and four suspects will appear here.</p>
-                        <button className="mt-5 rounded-md border px-3 py-2" onClick={new_case}>Accuse</button>
-                    </article>
-                    <article className="rounded-xl border bg-card p-6 shadow-sm">
-                        <h2 className="text-xl font-semibold">Interview</h2>
-                        <p className="mt-3 text-muted-foreground">Choose a suspect to question.</p>
-                        <label className="mt-4 block text-sm font-medium" htmlFor="question">Your question</label>
-                        <input id="question" className="mt-2 w-full rounded-md border bg-background px-3 py-2" value={question_text} onChange={update_question} placeholder="Where were you that evening?" />
-                        <button className="mt-3 rounded-md bg-primary px-4 py-2 text-primary-foreground">Ask</button>
-                        <button className="ml-2 mt-3 rounded-md border px-4 py-2">Show to suspect</button>
-                        <button className="ml-2 mt-3 rounded-md border px-4 py-2">Hint</button>
-                    </article>
-                    <article className="rounded-xl border bg-card p-6 shadow-sm">
-                        <h2 className="text-xl font-semibold">Notebook</h2>
-                        <p className="mt-3 text-muted-foreground">Found clues will be collected here.</p>
-                        <label className="mt-4 block text-sm font-medium" htmlFor="accusation">Accusation reason</label>
-                        <input id="accusation" className="mt-2 w-full rounded-md border bg-background px-3 py-2" value={accusation_reason} onChange={update_reason} placeholder="What connects the suspect to the crime?" />
-                    </article>
-                </section>
+    def pop_flash(text: str, bad: bool) {
+        flash = text;
+        flashBad = bad;
+        setTimeout(lambda { flash = ""; }, 1600);
+    }
+
+    def reset_game {
+        caseNow = None;
+        suspects = [];
+        score = 1000;
+        selectedId = "";
+        chats = {};
+        clues = [];
+        selectedClue = "";
+        cracked = [];
+        hints = [];
+        draft = "";
+        notice = "";
+        showAccuse = False;
+        accuseId = "";
+        accuseReason = "";
+        accuseError = "";
+        lastChance = False;
+        flash = "";
+        outcome = None;
+        startError = "";
+    }
+
+    # ---------- new_case ----------
+    async def fetch_case -> PublicCase | None {
+        try {
+            pc = await new_case();
+            if pc and pc.case_id {
+                return pc;
+            }
+        } except Exception {
+            return None;
+        }
+        return None;
+    }
+
+    async def start_case {
+        reset_game();
+        loadingMsg = "Generating your case...";
+        screen = "loading";
+        pc = await fetch_case();
+        if pc is None {
+            # The backend falls back to the classic case if generation fails.
+            loadingMsg = "Loading a classic case...";
+            pc = await fetch_case();
+        }
+        if pc is None {
+            startError = "Could not start a case. Is the backend running? Try again.";
+            screen = "start";
+            return;
+        }
+        caseNow = pc;
+        suspects = pc.suspects;
+        clues = pc.found_clues;
+        score = pc.score;
+        if len(pc.suspects) > 0 {
+            selectedId = pc.suspects[0].id;
+        }
+        screen = "play";
+    }
+
+    # ---------- question / show clue ----------
+    async def talk(text: str, clue_id: str | None) {
+        case_id = case_id_now();
+        suspect_id = selectedId;
+        old: list[dict[str, str]] = chats[suspect_id] if suspect_id in chats else [];
+        shown = ("(shows: " + clue_text(clue_id) + ") ") if clue_id else "";
+        lines: list[dict[str, str]] = old + [
+            {"who": "you", "text": shown + text, "kind": "show" if clue_id else "normal"}
+        ];
+        chats = chats_with(suspect_id, lines);
+        draft = "";
+        notice = "";
+        busy = True;
+        try {
+            # Positional call: local names must match the server parameter names.
+            turn = await question(case_id, suspect_id, text, clue_id);
+            kind = "crack" if turn.cracked_now else ("shrug" if clue_id else "normal");
+            lines = lines + [{"who": "suspect", "text": turn.reply, "kind": kind}];
+            known: list[str] = [c.id for c in clues];
+            fresh: list[PublicClue] = [c for c in turn.notebook if c.id not in known];
+            for c in fresh {
+                lines = lines + [{"who": "system", "text": "New clue in your notebook: " + c.text, "kind": "clue"}];
+            }
+            if len(turn.notebook) >= len(clues) {
+                clues = turn.notebook;
+            }
+            if turn.cracked_now {
+                if suspect_id not in cracked {
+                    cracked = cracked + [suspect_id];
+                }
+                selectedClue = "";
+                pop_flash("CRACKED! +150", True);
+            } elif len(fresh) > 0 {
+                pop_flash("New clue!", False);
+            }
+            score = turn.score;
+        } except Exception {
+            lines = lines + [{"who": "system", "text": "No answer came back. Try again.", "kind": "error"}];
+        }
+        chats = chats_with(suspect_id, lines);
+        busy = False;
+    }
+
+    async def send_question {
+        text = draft.strip();
+        if busy or not selectedId or not text {
+            return;
+        }
+        await talk(text, None);
+    }
+
+    async def show_clue {
+        if busy or not selectedId or not selectedClue {
+            return;
+        }
+        said = draft.strip();
+        if not said {
+            said = "Explain this.";
+        }
+        await talk(said, selectedClue);
+    }
+
+    # ---------- hint ----------
+    async def get_hint {
+        if busy {
+            return;
+        }
+        case_id = case_id_now();
+        busy = True;
+        notice = "";
+        try {
+            nudge = await hint(case_id);
+            hints = hints + [nudge];
+            # hint() returns only text, so mirror the server's -100 here.
+            # The next server response sets the real score.
+            score = max(0, score - 100);
+            pop_flash("-100", False);
+        } except Exception {
+            notice = "Could not get a hint. Try again.";
+        }
+        busy = False;
+    }
+
+    # ---------- accuse ----------
+    def open_accuse {
+        accuseId = "";
+        accuseReason = "";
+        accuseError = "";
+        showAccuse = True;
+    }
+
+    def close_accuse {
+        showAccuse = False;
+    }
+
+    async def submit_accusation {
+        if busy {
+            return;
+        }
+        case_id = case_id_now();
+        suspect_id = accuseId;
+        reason = accuseReason.strip();
+        if not suspect_id {
+            accuseError = "Pick a suspect first.";
+            return;
+        }
+        if not reason {
+            accuseError = "Write one line saying why.";
+            return;
+        }
+        busy = True;
+        accuseError = "";
+        try {
+            res = await accuse(case_id, suspect_id, reason);
+            score = res.score;
+            if res.final {
+                outcome = res;
+                showAccuse = False;
+                screen = "result";
             } else {
-                <section className="rounded-xl border bg-card p-8 shadow-sm">
-                    <h2 className="text-2xl font-semibold">Case result</h2>
-                    <p className="mt-3 text-muted-foreground">The outcome, true story, score, and detective rank will appear here.</p>
-                    <button className="mt-6 rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground" onClick={new_case}>Play Again</button>
-                </section>
-            }}
+                lastChance = True;
+                showAccuse = False;
+                notice = "Wrong! -300. One chance left.";
+                pop_flash("WRONG! -300", True);
+            }
+        } except Exception {
+            accuseError = "No answer came back. Try again.";
+        }
+        busy = False;
+    }
+
+    # ---------- setters for child components ----------
+    def pick_suspect(sid: str) {
+        selectedId = sid;
+    }
+
+    def set_draft(v: str) {
+        draft = v;
+    }
+
+    def pick_clue(cid: str) {
+        selectedClue = "" if selectedClue == cid else cid;
+    }
+
+    def pick_accused(sid: str) {
+        accuseId = sid;
+    }
+
+    def set_reason(v: str) {
+        accuseReason = v;
+    }
+
+    def clear_notice(_e: MouseEvent) {
+        notice = "";
+    }
+
+    # ---------- screens ----------
+    if screen == "start" or screen == "loading" {
+        return <div className="dark min-h-svh bg-background text-foreground">
+            <StartScreen
+                loading={screen == "loading"}
+                loadingMsg={loadingMsg}
+                errorMsg={startError}
+                onStart={start_case}
+            />
+        </div>;
+    }
+
+    if screen == "result" and outcome is not None {
+        return <div className="dark min-h-svh bg-background text-foreground">
+            <ResultScreen outcome={outcome} clues={clues} onPlayAgain={start_case} />
+        </div>;
+    }
+
+    currentName = "Suspect";
+    currentRole = "";
+    for s in suspects {
+        if s.id == selectedId {
+            currentName = s.name;
+            currentRole = s.role;
+        }
+    }
+    currentLines: list[dict[str, str]] = chats[selectedId] if selectedId in chats else [];
+    title = caseNow.title if caseNow is not None else "";
+    setting = caseNow.setting if caseNow is not None else "";
+    summary = caseNow.summary if caseNow is not None else "";
+
+    return <div className="dark min-h-svh bg-background text-foreground">
+        <div className="flex min-h-svh flex-col">
+            <header className="flex flex-wrap items-center gap-4 border-b bg-card px-5 py-3">
+                <span className="text-sm font-extrabold tracking-[0.15em] text-primary">WHODUNIT</span>
+                <h1 className="flex-1 text-lg font-semibold">{title}</h1>
+                <span className="rounded-full border px-4 py-1.5">
+                    Score <strong className="ml-1 text-lg text-primary">{score}</strong>
+                </span>
+            </header>
+            {notice and <div className="mx-5 mt-3 flex items-center justify-between gap-3 rounded-lg border border-destructive bg-destructive/15 px-4 py-2.5">
+                <span>{notice}</span>
+                <button className="text-sm underline" onClick={clear_notice}>Dismiss</button>
+            </div>}
+            <main className="grid flex-1 gap-4 p-5 lg:grid-cols-[300px_1fr_300px]">
+                <aside className="flex flex-col gap-4">
+                    <CaseFile title={title} setting={setting} summary={summary} />
+                    <SuspectList suspects={suspects} selectedId={selectedId} cracked={cracked} onSelect={pick_suspect} />
+                </aside>
+                <ChatPanel
+                    name={currentName}
+                    role={currentRole}
+                    lines={currentLines}
+                    draft={draft}
+                    busy={busy}
+                    isCracked={selectedId in cracked}
+                    selectedClueText={clue_text(selectedClue) if selectedClue else ""}
+                    onDraft={set_draft}
+                    onSend={send_question}
+                    onShow={show_clue}
+                />
+                <aside className="flex flex-col">
+                    <Notebook
+                        clues={clues}
+                        selectedClue={selectedClue}
+                        hints={hints}
+                        busy={busy}
+                        lastChance={lastChance}
+                        onPickClue={pick_clue}
+                        onHint={get_hint}
+                        onAccuse={open_accuse}
+                    />
+                </aside>
+            </main>
         </div>
-    </main>;
+        {flash and <div className={"pointer-events-none fixed left-1/2 top-24 z-50 -translate-x-1/2 animate-bounce rounded-xl px-6 py-3 text-2xl font-black shadow-lg " + ("bg-destructive text-white" if flashBad else "bg-primary text-primary-foreground")}>
+            {flash}
+        </div>}
+        {showAccuse and <AccuseDialog
+            suspects={suspects}
+            accuseId={accuseId}
+            reason={accuseReason}
+            errorMsg={accuseError}
+            busy={busy}
+            lastChance={lastChance}
+            onPick={pick_accused}
+            onReason={set_reason}
+            onSubmit={submit_accusation}
+            onCancel={close_accuse}
+        />}
+    </div>;
 }
