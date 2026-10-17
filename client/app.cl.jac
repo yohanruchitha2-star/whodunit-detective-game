@@ -6,9 +6,9 @@ The server is the source of truth for clues, cracks and score; the screens
 live in client/components/.
 """
 
+import from .components.Board { Board, TapeLabel, Polaroid, hand }
 import from .components.StartScreen { StartScreen }
 import from .components.CaseFile { CaseFile }
-import from .components.SuspectList { SuspectList }
 import from .components.ChatPanel { ChatPanel }
 import from .components.Notebook { Notebook }
 import from .components.AccuseDialog { AccuseDialog }
@@ -46,7 +46,20 @@ def:pub ClientApp() -> JsxElement {
         hintsLeft: int = -1,
         chancesLeft: int = 2,
         multiplier: float = 1.0,
-        outcome: AccuseOut | None = None;
+        outcome: AccuseOut | None = None,
+        interrogating: bool = False;
+
+    # Handwritten board font (Caveat), loaded once from Google Fonts.
+    can with entry {
+        if not document.getElementById("whodunit-fonts") {
+            link: any = document.createElement("link");
+            link.id = "whodunit-fonts";
+            link.rel = "stylesheet";
+            link.href = "https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap";
+            head: any = document.head;
+            head.appendChild(link);
+        }
+    }
 
     # ---------- helpers ----------
     def case_id_now -> str {
@@ -100,6 +113,7 @@ def:pub ClientApp() -> JsxElement {
         outcome = None;
         startError = "";
         hintsLeft = -1;
+        interrogating = False;
     }
 
     # ---------- new_case ----------
@@ -255,6 +269,24 @@ def:pub ClientApp() -> JsxElement {
         showAccuse = False;
     }
 
+    # Accuse button inside the interrogation: preselect that suspect.
+    def accuse_current {
+        accuseReason = "";
+        accuseError = "";
+        accuseId = selectedId;
+        showAccuse = True;
+    }
+
+    def open_suspect(sid: str) {
+        selectedId = sid;
+        draft = "";
+        interrogating = True;
+    }
+
+    def close_interrogation {
+        interrogating = False;
+    }
+
     async def submit_accusation {
         if busy {
             return;
@@ -281,11 +313,13 @@ def:pub ClientApp() -> JsxElement {
                 if res.game_over {
                     outcome = res;
                     showAccuse = False;
+                    interrogating = False;
                     screen = "result";
                 } else {
                     chancesLeft = res.chances_left;
                     lastChance = res.chances_left <= 1;
                     showAccuse = False;
+                    interrogating = False;
                     notice = "Wrong! -300. " + str(res.chances_left) + " chance(s) left.";
                     pop_flash("WRONG! -300", True);
                 }
@@ -297,10 +331,6 @@ def:pub ClientApp() -> JsxElement {
     }
 
     # ---------- setters for child components ----------
-    def pick_suspect(sid: str) {
-        selectedId = sid;
-    }
-
     def set_draft(v: str) {
         draft = v;
     }
@@ -332,88 +362,114 @@ def:pub ClientApp() -> JsxElement {
 
     # ---------- screens ----------
     if screen == "start" or screen == "loading" {
-        return <div className="dark min-h-svh bg-background text-foreground">
-            <StartScreen
-                loading={screen == "loading"}
-                loadingMsg={loadingMsg}
-                errorMsg={startError}
-                onStart={start_case}
-                selected={difficulty}
-                onSelect={pick_level}
-            />
-        </div>;
+        return <StartScreen
+            loading={screen == "loading"}
+            loadingMsg={loadingMsg}
+            errorMsg={startError}
+            onStart={start_case}
+            selected={difficulty}
+            onSelect={pick_level}
+        />;
     }
 
     if screen == "result" and outcome is not None {
-        return <div className="dark min-h-svh bg-background text-foreground">
-            <ResultScreen outcome={outcome} clues={clues} onPlayAgain={play_again} />
-        </div>;
+        return <ResultScreen outcome={outcome} clues={clues} onPlayAgain={play_again} />;
     }
 
     currentName = "Suspect";
     currentRole = "";
-    for s in suspects {
+    currentStyle = "";
+    currentIdx = 0;
+    for (i, s) in enumerate(suspects) {
         if s.id == selectedId {
             currentName = s.name;
             currentRole = s.role;
+            currentStyle = s.style;
+            currentIdx = i;
         }
     }
     currentLines: list[dict[str, str]] = chats[selectedId] if selectedId in chats else [];
     title = caseNow.title if caseNow is not None else "";
     setting = caseNow.place if caseNow is not None else "";
     summary = caseNow.what if caseNow is not None else "";
+    photoCols = "grid-cols-2 xl:grid-cols-3" if len(suspects) > 4 else ("grid-cols-2 sm:grid-cols-3" if len(suspects) == 3 else "grid-cols-2");
 
-    return <div className="dark min-h-svh bg-background text-foreground">
-        <div className="flex min-h-svh flex-col">
-            <header className="flex flex-wrap items-center gap-4 border-b bg-card px-5 py-3">
-                <span className="text-sm font-extrabold tracking-[0.15em] text-primary">WHODUNIT</span>
-                <h1 className="flex-1 text-lg font-semibold">{title}</h1>
-                <span className="rounded-full border border-primary px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-primary">
-                    {difficulty}
-                </span>
-                <span className="rounded-full border px-4 py-1.5">
-                    Score <strong className="ml-1 text-lg text-primary">{score}</strong>
-                </span>
-            </header>
-            {notice and <div className="mx-5 mt-3 flex items-center justify-between gap-3 rounded-lg border border-destructive bg-destructive/15 px-4 py-2.5">
-                <span>{notice}</span>
+    return <Board>
+        <div className="relative mx-auto flex max-w-7xl flex-col gap-6">
+            <div className="flex flex-wrap items-start justify-center gap-4 lg:justify-between">
+                <span className="hidden w-40 lg:block"></span>
+                <TapeLabel text={title} big={True} tilt="-rotate-1" />
+                <div className="rotate-2 bg-[#fde68a] px-4 py-2 text-[#231a12] shadow-lg">
+                    <p className="text-xl font-bold leading-none" style={hand()}>{"Score: " + str(score)}</p>
+                    <p className="mt-1 text-xs font-bold uppercase tracking-widest text-[#8a2d1d]">{difficulty}</p>
+                </div>
+            </div>
+            {notice and <div className="mx-auto flex max-w-xl items-center justify-between gap-3 bg-red-50 px-4 py-2.5 text-[#231a12] shadow-md">
+                <span className="font-semibold text-red-800">{notice}</span>
                 <button className="text-sm underline" onClick={clear_notice}>Dismiss</button>
             </div>}
-            <main className="grid flex-1 gap-4 p-5 lg:grid-cols-[300px_1fr_300px]">
-                <aside className="flex flex-col gap-4">
+            <main className="grid gap-10 lg:grid-cols-[minmax(240px,300px)_1fr_minmax(240px,300px)]">
+                <section className="flex flex-col items-start gap-5">
+                    <TapeLabel text="Case File" tilt="rotate-1" />
                     <CaseFile title={title} setting={setting} summary={summary} />
-                    <SuspectList suspects={suspects} selectedId={selectedId} cracked={cracked} onSelect={pick_suspect} />
-                </aside>
-                <ChatPanel
-                    name={currentName}
-                    role={currentRole}
-                    lines={currentLines}
-                    draft={draft}
-                    busy={busy}
-                    isCracked={selectedId in cracked}
-                    selectedClueText={clue_text(selectedClue) if selectedClue else ""}
-                    onDraft={set_draft}
-                    onSend={send_question}
-                    onShow={show_clue}
-                    onAsk={ask_starter}
-                />
-                <aside className="flex flex-col">
-                    <Notebook
-                        clues={clues}
-                        selectedClue={selectedClue}
-                        hints={hints}
-                        busy={busy}
-                        lastChance={lastChance}
-                        hintCost={hintCost}
-                        hintsLeft={hintsLeft}
-                        onPickClue={pick_clue}
-                        onHint={get_hint}
-                        onAccuse={open_accuse}
-                    />
-                </aside>
+                </section>
+                <section className="flex flex-col items-center gap-5">
+                    <TapeLabel text="Suspects" tilt="-rotate-1" />
+                    <div className={"grid w-full max-w-xl gap-6 " + photoCols}>
+                        {for (i, s) in enumerate(suspects) {
+                            <Polaroid
+                                key={s.id}
+                                sid={s.id}
+                                name={s.name}
+                                role={s.role}
+                                style={s.style}
+                                idx={i}
+                                isCracked={s.cracked or s.id in cracked}
+                                onOpen={open_suspect}
+                            />
+                        }}
+                    </div>
+                    <p className="text-lg font-bold text-[#231a12]/80" style={hand()}>Click a photo to question that suspect.</p>
+                </section>
+                <section className="flex flex-col items-start gap-5">
+                    <TapeLabel text="Notebook" tilt="rotate-2" />
+                    <div className="w-full">
+                        <Notebook
+                            clues={clues}
+                            selectedClue={selectedClue}
+                            hints={hints}
+                            busy={busy}
+                            lastChance={lastChance}
+                            hintCost={hintCost}
+                            hintsLeft={hintsLeft}
+                            onPickClue={pick_clue}
+                            onHint={get_hint}
+                            onAccuse={open_accuse}
+                        />
+                    </div>
+                </section>
             </main>
         </div>
-        {flash and <div className={"pointer-events-none fixed left-1/2 top-24 z-50 -translate-x-1/2 animate-bounce rounded-xl px-6 py-3 text-2xl font-black shadow-lg " + ("bg-destructive text-white" if flashBad else "bg-primary text-primary-foreground")}>
+        {interrogating and <ChatPanel
+            name={currentName}
+            role={currentRole}
+            style={currentStyle}
+            idx={currentIdx}
+            lines={currentLines}
+            draft={draft}
+            busy={busy}
+            isCracked={selectedId in cracked}
+            clues={clues}
+            selectedClue={selectedClue}
+            onPickClue={pick_clue}
+            onDraft={set_draft}
+            onSend={send_question}
+            onShow={show_clue}
+            onAsk={ask_starter}
+            onAccuse={accuse_current}
+            onClose={close_interrogation}
+        />}
+        {flash and <div className={"pointer-events-none fixed left-1/2 top-24 z-[60] -translate-x-1/2 animate-bounce px-6 py-3 text-3xl font-black shadow-xl " + ("rotate-[-4deg] border-4 border-red-700 bg-[#fdf6e3] text-red-700" if flashBad else "rotate-2 bg-[#fde68a] text-[#231a12]")} style={hand()}>
             {flash}
         </div>}
         {showAccuse and <AccuseDialog
@@ -429,5 +485,5 @@ def:pub ClientApp() -> JsxElement {
             onSubmit={submit_accusation}
             onCancel={close_accuse}
         />}
-    </div>;
+    </Board>;
 }
