@@ -27,6 +27,7 @@ def:pub AccuseDialog(
     errorMsg: str,
     busy: bool,
     lastChance: bool,
+    chancesLeft: int,
     onPick: Callable[[str], None],
     onReason: Callable[[str], None],
     onSubmit: Callable[[], None],
@@ -48,7 +49,7 @@ def:pub AccuseDialog(
         <div className="flex w-full max-w-md flex-col gap-3 rounded-xl border bg-card p-5" role="dialog" aria-modal="true">
             <h2 className="text-xl font-semibold">Who did it?</h2>
             <p className={"text-sm " + ("font-semibold text-destructive" if lastChance else "text-muted-foreground")}>
-                {"This is your LAST chance." if lastChance else "A wrong guess costs 300 points."}
+                {"This is your LAST chance." if chancesLeft <= 1 else "A wrong guess costs 300 points. Chances left: " + str(chancesLeft)}
             </p>
             <div className="grid grid-cols-2 gap-2">
                 {for s in suspects {

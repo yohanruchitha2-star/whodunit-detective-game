@@ -1,8 +1,8 @@
 """Result screen: verdict, true story, clues found, score and rank."""
 
-sv import from game.types { Result, PublicClue }
+sv import from game.types { AccuseOut, PublicClue }
 
-def:pub ResultScreen(outcome: Result, clues: list[PublicClue], onPlayAgain: Callable[[], None]) -> JsxElement {
+def:pub ResultScreen(outcome: AccuseOut, clues: list[PublicClue], onPlayAgain: Callable[[], None]) -> JsxElement {
     def handle_again(_e: MouseEvent) {
         onPlayAgain();
     }
@@ -17,6 +17,11 @@ def:pub ResultScreen(outcome: Result, clues: list[PublicClue], onPlayAgain: Call
                 <div className="min-w-36 rounded-xl border bg-card px-5 py-3">
                     <p className="text-xs font-bold tracking-[0.15em] text-primary">SCORE</p>
                     <p className="text-4xl font-black">{outcome.score}</p>
+                </div>
+                <div className="min-w-36 rounded-xl border bg-card px-5 py-3">
+                    <p className="text-xs font-bold tracking-[0.15em] text-primary">DIFFICULTY</p>
+                    <p className="text-xl font-bold capitalize">{outcome.difficulty}</p>
+                    <p className="text-xs text-muted-foreground">score x{outcome.multiplier}</p>
                 </div>
                 <div className="min-w-36 rounded-xl border bg-card px-5 py-3">
                     <p className="text-xs font-bold tracking-[0.15em] text-primary">RANK</p>

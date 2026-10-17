@@ -51,11 +51,11 @@ obj RevealOut {
 sem CaseSpec.title = "Short case title, e.g. 'The Stolen Necklace'.";
 sem CaseSpec.where = "Sri Lankan location of the crime, e.g. 'A wedding hall in Kandy'.";
 sem CaseSpec.what = "Two sentences: what happened, when, and the locked-room or puzzle detail. No names of the culprit.";
-sem CaseSpec.culprit_id = "Id of the single guilty suspect. Must be one of s1, s2, s3, s4.";
+sem CaseSpec.culprit_id = "Id of the single guilty suspect. Must be the id of one of the suspects.";
 sem CaseSpec.true_story = "Full explanation of how the culprit did it and how the clues prove it. Revealed only at game end.";
-sem CaseSpec.suspects = "Exactly 4 suspects with ids s1, s2, s3, s4.";
+sem CaseSpec.suspects = "Exactly suspect_count suspects with ids s1, s2, s3, ... in order.";
 sem CaseSpec.clues = "Between 3 and 6 clues with ids k1, k2, k3, ...";
-sem SuspectSpec.id = "s1, s2, s3 or s4.";
+sem SuspectSpec.id = "s1, s2, s3, ... in order.";
 sem SuspectSpec.name = "Sri Lankan first name, unique.";
 sem SuspectSpec.role = "Job or relation to the event, one or two words.";
 sem SuspectSpec.style = "Speaking style: one of calm, nervous, rude, chatty. Use at least three different styles across the suspects.";
@@ -79,8 +79,10 @@ sem RevealOut.proof_clues = "Ids of the clues that prove the culprit's guilt.";
 # ---------------------------------------------------------------------------
 # Agent 1: Game Master
 # ---------------------------------------------------------------------------
-def game_master(theme: str) -> CaseSpec by llm(temperature=0.9);
-sem game_master = "You are the Game Master of a detective game set in Sri Lanka. Invent a brand new mystery for the given theme. Use Sri Lankan names and places. Exactly 4 suspects (s1-s4), exactly one culprit. Build it in this order. (1) Pick the culprit and write the true story. (2) The culprit has a lie, and at least one clue that breaks it. (3) A different innocent suspect also has a lie with a breaking clue (a red herring the player can crack early). (4) Every clue must appear in the 'knows' list of at least one suspect. HARD RULE: if a clue has breaks = X, its id must be in the 'knows' list of some suspect OTHER than X (a witness) and must NEVER be in X's own 'knows' list. Before answering, check each clue against this rule and fix violations by moving the clue id to a witness. Suspects who do not lie are the natural witnesses. Keep every text short. Never reveal the culprit outside culprit_id and true_story.";
+def game_master(theme: str, suspect_count: int, red_herrings: int) -> CaseSpec by llm(temperature=0.9);
+sem game_master = "You are the Game Master of a detective game set in Sri Lanka. Invent a brand new mystery for the given theme. Use Sri Lankan names and places. Exactly suspect_count suspects (ids s1, s2, ... in order), exactly one culprit. Build it in this order. (1) Pick the culprit and write the true story. (2) The culprit has a lie, and at least one clue that breaks it. (3) Exactly red_herrings innocent suspects also have a lie, each with a breaking clue (red herrings the player can crack early). All other innocent suspects have lie = None and serve as witnesses. Use between 3 and 7 clues. (4) Every clue must appear in the 'knows' list of at least one suspect. HARD RULE: if a clue has breaks = X, its id must be in the 'knows' list of some suspect OTHER than X (a witness) and must NEVER be in X's own 'knows' list. Before answering, check each clue against this rule and fix violations by moving the clue id to a witness. Suspects who do not lie are the natural witnesses. Keep every text short. Never reveal the culprit outside culprit_id and true_story.";
+sem game_master.suspect_count = "How many suspects to create (3, 4 or 5).";
+sem game_master.red_herrings = "How many innocent suspects must also tell a lie (1 or 2).";
 sem game_master.theme = "Setting theme, for example: wedding, office, temple festival, tea estate, train journey.";
 
 # ---------------------------------------------------------------------------
@@ -92,7 +94,8 @@ def suspect_reply(
     history: list[str],
     question: str,
     shown_clue: ClueInfo | None,
-    cracked: bool
+    cracked: bool,
+    difficulty: str
 ) -> SuspectOut by llm(temperature=0.7);
 sem suspect_reply = "Role-play ONE suspect in a detective interrogation, in first person, 1 to 3 short sentences. Match the speaking style: calm = polite full sentences; nervous = hesitant ('Uh... I mean...'); rude = short and annoyed; chatty = over-shares and gossips. If cracked is False, keep to your lie and public alibi, deflect, and NEVER confess or reveal your secret; if a clue is shown, shrug it off or explain it away. If cracked is True, the shown clue has exposed your lie: admit it and give the truth about what you hid, but still do not accuse anyone you have no evidence against. You may let slip a clue only from known_clues when it fits the question, and list its id in proposed_clue_ids; otherwise return an empty list. Never invent clue ids. Never name who the culprit is.";
 sem suspect_reply.suspect = "The suspect being played: name, role, speaking style, public alibi, secret and lie. Never reveal the secret unless cracked is True.";
@@ -100,6 +103,7 @@ sem suspect_reply.known_clues = "The only clues this suspect knows and may revea
 sem suspect_reply.history = "Earlier lines of this conversation, oldest first, as 'Player: ...' and 'Name: ...'.";
 sem suspect_reply.question = "What the player just said or asked. May be empty when a clue is shown.";
 sem suspect_reply.shown_clue = "A clue the player is confronting the suspect with, or None.";
+sem suspect_reply.difficulty = "easy: chatty and cooperative, readily lets a known clue slip when the question is on topic. normal: guarded but fair. hard: evasive and terse, lets a clue slip only when the player's question directly and specifically targets the subject of that clue, otherwise deflects.";
 sem suspect_reply.cracked = "True only when the game engine verified the shown clue breaks this suspect's lie.";
 
 # ---------------------------------------------------------------------------

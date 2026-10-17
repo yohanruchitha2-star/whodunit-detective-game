@@ -22,6 +22,8 @@ def:pub Notebook(
     hints: list[str],
     busy: bool,
     lastChance: bool,
+    hintCost: int,
+    hintsLeft: int,
     onPickClue: Callable[[str], None],
     onHint: Callable[[], None],
     onAccuse: Callable[[], None]
@@ -54,10 +56,10 @@ def:pub Notebook(
         <div className="mt-auto flex gap-2 pt-2">
             <button
                 className="flex-1 rounded-lg border px-3 py-2 font-semibold hover:border-primary disabled:opacity-50"
-                disabled={busy}
+                disabled={busy or hintsLeft == 0}
                 onClick={handle_hint}
             >
-                Hint (-100)
+                {"No hints left" if hintsLeft == 0 else "Hint (-" + str(hintCost) + ")"}
             </button>
             <button
                 className="flex-1 rounded-lg bg-destructive px-3 py-2 font-semibold text-white hover:bg-destructive/85 disabled:opacity-50"
