@@ -1,4 +1,6 @@
-"""Notebook of found clues + Hint and Accuse buttons (right panel)."""
+"""Detective's notebook pinned to the board: found clues, hints, Hint and Accuse."""
+
+import from .Board { Paper, hand }
 
 sv import from game.types { PublicClue }
 
@@ -7,12 +9,9 @@ def:pub ClueItem(cid: str, text: str, selected: bool, onPick: Callable[[str], No
         onPick(cid);
     }
 
-    tone = "border-primary bg-primary/15" if selected else "border-border bg-background hover:border-primary/60";
-    return <button
-        className={"w-full rounded-lg border border-l-4 border-l-primary p-2.5 text-left text-sm transition " + tone}
-        onClick={handle_click}
-    >
-        {text}
+    tone = "bg-[#fde68a] font-semibold" if selected else "hover:bg-[#fde68a]/50";
+    return <button className={"w-full rounded-sm px-1.5 py-1 text-left text-sm leading-snug " + tone} onClick={handle_click}>
+        {"• " + text}
     </button>;
 }
 
@@ -36,39 +35,47 @@ def:pub Notebook(
         onAccuse();
     }
 
-    return <section className="flex flex-1 flex-col gap-3 rounded-xl border bg-card p-4">
-        <p className="text-xs font-bold tracking-[0.15em] text-primary">NOTEBOOK</p>
-        <div className="flex flex-col gap-2">
+    lined = {
+        "backgroundImage": "repeating-linear-gradient(transparent 0px, transparent 27px, #c9d6e8 28px)",
+        "backgroundPosition": "0 8px"
+    };
+    return <Paper className="flex min-h-[340px] flex-col border-l-[3px] border-red-300" tilt="-rotate-1">
+        <div className="flex-1" style={lined}>
+            <p className="text-2xl font-bold" style={hand()}>Clues found</p>
             {if len(clues) == 0 {
-                <p className="text-sm text-muted-foreground">No clues yet. Question the suspects.</p>
+                <p className="text-sm italic text-[#6b5a48]">Nothing yet. Question the suspects.</p>
             }}
             {for c in clues {
                 <ClueItem key={c.id} cid={c.id} text={c.text} selected={c.id == selectedClue} onPick={onPickClue} />
             }}
+            {len(clues) > 0 and <p className="mt-1 text-xs italic text-[#6b5a48]">
+                Pick a clue, then show it to a suspect.
+            </p>}
+            {len(hints) > 0 and <div className="mt-3">
+                <p className="text-2xl font-bold" style={hand()}>Hints</p>
+                {for (i, h) in enumerate(hints) {
+                    <p key={str(i)} className="text-sm italic text-[#5a3a12]">{"→ " + h}</p>
+                }}
+            </div>}
         </div>
-        {len(clues) > 0 and <p className="text-xs text-muted-foreground">Pick a clue, then press Show in the chat.</p>}
-        {len(hints) > 0 and <div className="flex flex-col gap-2">
-            <p className="text-xs font-bold tracking-[0.15em] text-primary">HINTS</p>
-            {for (i, h) in enumerate(hints) {
-                <p key={str(i)} className="rounded-lg border border-dashed border-primary/60 p-2 text-sm">{h}</p>
-            }}
-        </div>}
-        <div className="mt-auto flex gap-2 pt-2">
+        <div className="mt-4 flex gap-2">
             <button
-                className="flex-1 rounded-lg border px-3 py-2 font-semibold hover:border-primary disabled:opacity-50"
+                className="flex-1 rounded-sm border-2 border-[#5a4a3a] px-3 py-2 text-lg font-bold hover:bg-[#fde68a] disabled:opacity-50"
+                style={hand()}
                 disabled={busy or hintsLeft == 0}
                 onClick={handle_hint}
             >
                 {"No hints left" if hintsLeft == 0 else "Hint (-" + str(hintCost) + ")"}
             </button>
             <button
-                className="flex-1 rounded-lg bg-destructive px-3 py-2 font-semibold text-white hover:bg-destructive/85 disabled:opacity-50"
+                className="flex-1 rounded-sm bg-[#8a2d1d] px-3 py-2 text-lg font-bold text-[#fdf6e3] hover:bg-[#a33a27] disabled:opacity-50"
+                style={hand()}
                 disabled={busy}
                 onClick={handle_accuse}
             >
                 Accuse
             </button>
         </div>
-        {lastChance and <p className="text-sm font-semibold text-destructive">Last chance to accuse!</p>}
-    </section>;
+        {lastChance and <p className="mt-2 text-center text-sm font-bold text-red-700">Last chance to accuse!</p>}
+    </Paper>;
 }

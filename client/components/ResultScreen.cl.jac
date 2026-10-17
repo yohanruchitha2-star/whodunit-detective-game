@@ -1,4 +1,6 @@
-"""Result screen: verdict, true story, clues found, score and rank."""
+"""Result screen: case-closed stamp, score/difficulty/rank, true story and the clues."""
+
+import from .Board { Board, TapeLabel, Paper, Stamp, hand }
 
 sv import from game.types { AccuseOut, PublicClue }
 
@@ -7,45 +9,48 @@ def:pub ResultScreen(outcome: AccuseOut, clues: list[PublicClue], onPlayAgain: C
         onPlayAgain();
     }
 
-    verdictTone = "bg-green-600 text-white" if outcome.correct else "bg-destructive text-white";
-    return <div className="flex min-h-svh items-center justify-center px-4 py-10">
-        <div className="w-full max-w-2xl text-center">
-            <span className={"inline-block rounded-full px-4 py-1.5 text-sm font-black tracking-[0.2em] " + verdictTone}>
-                {"CASE SOLVED" if outcome.correct else "WRONG SUSPECT"}
-            </span>
-            <div className="mt-6 flex justify-center gap-3">
-                <div className="min-w-36 rounded-xl border bg-card px-5 py-3">
-                    <p className="text-xs font-bold tracking-[0.15em] text-primary">SCORE</p>
-                    <p className="text-4xl font-black">{outcome.score}</p>
-                </div>
-                <div className="min-w-36 rounded-xl border bg-card px-5 py-3">
-                    <p className="text-xs font-bold tracking-[0.15em] text-primary">DIFFICULTY</p>
-                    <p className="text-xl font-bold capitalize">{outcome.difficulty}</p>
-                    <p className="text-xs text-muted-foreground">score x{outcome.multiplier}</p>
-                </div>
-                <div className="min-w-36 rounded-xl border bg-card px-5 py-3">
-                    <p className="text-xs font-bold tracking-[0.15em] text-primary">RANK</p>
-                    <p className="text-xl font-bold text-primary">{outcome.rank if outcome.rank else "Rookie"}</p>
-                </div>
+    culpritName = outcome.culprit.name if outcome.culprit is not None and outcome.culprit.name else "";
+    return <Board>
+        <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 pt-4">
+            <TapeLabel text="Case File: Closed" big={True} tilt="-rotate-1" />
+            <Stamp text={"Case solved" if outcome.correct else "Wrong suspect"} good={outcome.correct} className="bg-[#fdf6e3]/80 text-3xl sm:text-4xl" />
+            {culpritName and <p className="text-3xl font-bold text-[#231a12]" style={hand()}>
+                {"The culprit was " + culpritName + "."}
+            </p>}
+            <div className="grid w-full grid-cols-3 gap-4">
+                <Paper className="text-center" tilt="-rotate-2">
+                    <p className="text-lg font-bold" style={hand()}>Score</p>
+                    <p className="text-4xl font-black text-[#8a2d1d]">{outcome.score}</p>
+                </Paper>
+                <Paper className="text-center" tilt="rotate-1">
+                    <p className="text-lg font-bold" style={hand()}>Difficulty</p>
+                    <p className="text-2xl font-bold capitalize">{outcome.difficulty}</p>
+                    <p className="text-xs text-[#5a4a3a]">{"score x" + str(outcome.multiplier)}</p>
+                </Paper>
+                <Paper className="text-center" tilt="rotate-2">
+                    <p className="text-lg font-bold" style={hand()}>Rank</p>
+                    <p className="text-2xl font-bold text-[#8a2d1d]">{outcome.rank if outcome.rank else "Rookie"}</p>
+                </Paper>
             </div>
-            <section className="mt-6 rounded-xl border bg-card p-5 text-left">
-                <p className="text-xs font-bold tracking-[0.15em] text-primary">WHAT REALLY HAPPENED</p>
+            <Paper className="w-full" tilt="rotate-[0.5deg]">
+                <p className="text-2xl font-bold" style={hand()}>What really happened</p>
                 <p className="mt-2 leading-relaxed">{outcome.story}</p>
-            </section>
-            {len(clues) > 0 and <section className="mt-4 rounded-xl border bg-card p-5 text-left">
-                <p className="text-xs font-bold tracking-[0.15em] text-primary">CLUES YOU FOUND</p>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
+            </Paper>
+            {len(clues) > 0 and <Paper className="w-full" tilt="-rotate-1">
+                <p className="text-2xl font-bold" style={hand()}>Clues you found</p>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
                     {for c in clues {
                         <li key={c.id}>{c.text}</li>
                     }}
                 </ul>
-            </section>}
+            </Paper>}
             <button
-                className="mt-8 rounded-lg bg-primary px-8 py-3 text-lg font-semibold text-primary-foreground hover:bg-primary/85"
+                className="rounded-sm bg-[#8a2d1d] px-10 py-3 text-2xl font-bold text-[#fdf6e3] shadow-lg hover:bg-[#a33a27]"
+                style={hand()}
                 onClick={handle_again}
             >
                 Play Again
             </button>
         </div>
-    </div>;
+    </Board>;
 }
