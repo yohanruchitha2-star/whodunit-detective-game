@@ -5,10 +5,10 @@ description = "Whodunit detective game architecture"
 entry-point = "main.jac"
 kind = "web-app"
 
-[byllm.model]
-default_model = "xai/grok-4.3"
+[plugins.byllm.model]
+default_model = "gemini/gemini-3.8-flash"
 
-[byllm.call_params]
+[plugins.byllm.call_params]
 max_output_retries = 3
 
 [serve]
