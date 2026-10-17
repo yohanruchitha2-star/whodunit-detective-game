@@ -1,7 +1,14 @@
 # Shared data shapes + the 4 AI agents.
-# NOTE: keep this file at the project root, with the types defined next to the agents. byllm 0.6.19 / jaclang 0.16.7
-# crashes ("'str' object has no attribute 'fields'") when the `by llm` functions live in a sub-package such as game/.
-# Other modules should do: import from agents { CaseSpec, SuspectOut, ... }
+# NOTE: keep this file at the project root so other modules can do:
+#   import from agents { CaseSpec, SuspectOut, game_master, ... }
+
+import os;
+import from jaclang.byllm.lib { Model }
+
+# Explicit model. On jaclang 0.34 the ambient `llm` configured only through jac.toml crashed the runtime
+# (segfault, exit 134) in our tests. Set GEMINI_API_KEY (or GROQ_API_KEY with BYLLM_DEFAULT_MODEL=groq/<model>)
+# in the environment; no key ever goes in a file.
+glob llm: Model = Model(model_name=os.environ.get("BYLLM_DEFAULT_MODEL", "gemini/gemini-3.8-flash"));
 
 obj ClueSpec {
     has id: str;
